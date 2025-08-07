@@ -24,7 +24,9 @@ data_arguments:
   # label dictionary for str: interger mapping (optional)
   label_dict:
     LUAD: 0
-    LSCC: 1                        
+    LSCC: 1
+  # optional directory for precomputed features (h5/pt files)
+  preload_dir: null
 patching_arguments:
   # arguments for patching
   patch_size: 256

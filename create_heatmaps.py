@@ -28,6 +28,8 @@ parser = argparse.ArgumentParser(description='Heatmap inference script')
 parser.add_argument('--save_exp_code', type=str, default=None,
                     help='experiment code')
 parser.add_argument('--overlap', type=float, default=None)
+parser.add_argument('--preload_dir', type=str, default=None,
+                    help='directory of precomputed features to preload')
 parser.add_argument('--config_file', type=str, default="heatmap_config_template.yaml")
 args = parser.parse_args()
 device=torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -78,6 +80,8 @@ def parse_config_dict(args, config_dict):
         config_dict['exp_arguments']['save_exp_code'] = args.save_exp_code
     if args.overlap is not None:
         config_dict['patching_arguments']['overlap'] = args.overlap
+    if args.preload_dir is not None:
+        config_dict['data_arguments']['preload_dir'] = args.preload_dir
     return config_dict
 
 if __name__ == '__main__':
@@ -277,20 +281,31 @@ if __name__ == '__main__':
         mask = wsi_object.visWSI(**vis_params, number_contours=True)
         mask.save(mask_path)
         
-        features_path = os.path.join(r_slide_save_dir, slide_id+'.pt')
-        h5_path = os.path.join(r_slide_save_dir, slide_id+'.h5')
-    
+        features_dir = getattr(data_args, 'preload_dir', None)
+        preloaded = False
 
-        ##### check if h5_features_file exists ######
-        if not os.path.isfile(h5_path) :
-            _, _, wsi_object = compute_from_patches(wsi_object=wsi_object, 
-                                            model=model, 
-                                            feature_extractor=feature_extractor, 
-                                            img_transforms=img_transforms,
-                                            batch_size=exp_args.batch_size, **blocky_wsi_kwargs, 
-                                            attn_save_path=None, feat_save_path=h5_path, 
-                                            ref_scores=None)				
-        
+        if features_dir is not None:
+            preload_h5_path = os.path.join(features_dir, slide_id + '.h5')
+            preload_pt_path = os.path.join(features_dir, slide_id + '.pt')
+            if os.path.isfile(preload_h5_path):
+                h5_path = preload_h5_path
+                features_path = preload_pt_path
+                preloaded = True
+
+        if not preloaded:
+            features_path = os.path.join(r_slide_save_dir, slide_id + '.pt')
+            h5_path = os.path.join(r_slide_save_dir, slide_id + '.h5')
+
+            ##### check if h5_features_file exists ######
+            if not os.path.isfile(h5_path):
+                _, _, wsi_object = compute_from_patches(wsi_object=wsi_object,
+                                                model=model,
+                                                feature_extractor=feature_extractor,
+                                                img_transforms=img_transforms,
+                                                batch_size=exp_args.batch_size, **blocky_wsi_kwargs,
+                                                attn_save_path=None, feat_save_path=h5_path,
+                                                ref_scores=None)
+
         ##### check if pt_features_file exists ######
         if not os.path.isfile(features_path):
             file = h5py.File(h5_path, "r")
@@ -298,7 +313,7 @@ if __name__ == '__main__':
             torch.save(features, features_path)
             file.close()
 
-        # load features 
+        # load features
         features = torch.load(features_path)
         process_stack.loc[i, 'bag_size'] = len(features)
         
@@ -366,12 +381,17 @@ if __name__ == '__main__':
             ref_scores = None
         
         if heatmap_args.calc_heatmap:
-            compute_from_patches(wsi_object=wsi_object, 
-                                img_transforms=img_transforms,
-                                clam_pred=Y_hats[0], model=model, 
-                                feature_extractor=feature_extractor, 
-                                batch_size=exp_args.batch_size, **wsi_kwargs, 
-                                attn_save_path=save_path,  ref_scores=ref_scores)
+            if preloaded:
+                if not os.path.isfile(save_path):
+                    asset_dict = {'attention_scores': scores, 'coords': coords}
+                    save_hdf5(save_path, asset_dict, mode='w')
+            else:
+                compute_from_patches(wsi_object=wsi_object,
+                                    img_transforms=img_transforms,
+                                    clam_pred=Y_hats[0], model=model,
+                                    feature_extractor=feature_extractor,
+                                    batch_size=exp_args.batch_size, **wsi_kwargs,
+                                    attn_save_path=save_path,  ref_scores=ref_scores)
 
         if not os.path.isfile(save_path):
             print('heatmap {} not found'.format(save_path))
