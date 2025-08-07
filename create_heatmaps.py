@@ -97,14 +97,6 @@ if __name__ == '__main__':
         else:
             print ('\n'+key + " : " + str(value))
             
-    decision = input('Continue? Y/N ')
-    if decision in ['Y', 'y', 'Yes', 'yes']:
-        pass
-    elif decision in ['N', 'n', 'No', 'NO']:
-        exit()
-    else:
-        raise NotImplementedError
-
     args = config_dict
     patch_args = argparse.Namespace(**args['patching_arguments'])
     data_args = argparse.Namespace(**args['data_arguments'])
