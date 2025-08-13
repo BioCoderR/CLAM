@@ -1,15 +1,21 @@
 """Script to process evaluation results produced by eval.py.
 
 For each split (train, val, test, all) under a given root directory,
+
 or for any explicitly provided split directories, this script aggregates
 fold results and generates:
+
+this script aggregates fold results and generates:
+
     1. ROC and Precision-Recall curves for every fold.
     2. Per-class ROC and Precision-Recall curves across all folds.
     3. Classification metrics for each fold and overall.
     4. Confusion matrix plots for each fold.
 
-Expected directory structure for each split directory:
-    <split_dir>/fold_*.csv
+
+Expected directory structure:
+    <eval_root>/<split>/fold_*.csv
+
 
 Each fold csv is the output of eval.py and contains columns:
     - 'Y': ground truth labels
@@ -32,15 +38,20 @@ def parse_args() -> argparse.Namespace:
         "--eval_root",
         type=str,
         default="./eval_results",
+
         help=(
             "Root directory containing split folders (train/val/test/all). "
             "Ignored if --split_dirs is provided."
         ),
+
+        help="Root directory containing split folders (train/val/test/all)",
+
     )
     parser.add_argument(
         "--splits",
         nargs="+",
         default=["train", "val", "test", "all"],
+
         help="List of splits under eval_root to process",
     )
     parser.add_argument(
@@ -51,6 +62,9 @@ def parse_args() -> argparse.Namespace:
             "Explicit paths to split directories. Use this if your eval "
             "results are not organized under a common root."
         ),
+
+        help="List of splits to process if present",
+
     )
     return parser.parse_args()
 
@@ -228,6 +242,7 @@ def process_split(split_dir: str) -> None:
 
 if __name__ == "__main__":
     args = parse_args()
+
     if args.split_dirs:
         split_map = {
             os.path.basename(os.path.normpath(d)): d for d in args.split_dirs
@@ -238,6 +253,10 @@ if __name__ == "__main__":
         }
 
     for split, split_path in split_map.items():
+
+    for split in args.splits:
+        split_path = os.path.join(args.eval_root, split)
+
         if os.path.isdir(split_path):
             print(f"Processing split: {split}")
             process_split(split_path)
