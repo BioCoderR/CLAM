@@ -1,3 +1,22 @@
+
+"""Process evaluation results produced by :mod:`eval.py`.
+
+Given a directory that contains CSV files for each cross-validation fold
+(```fold_*.csv```), this script aggregates the results and generates:
+
+    1. ROC and Precision–Recall curves for every fold.
+    2. Per-class ROC and Precision–Recall curves across all folds.
+    3. Classification metrics for each fold and overall.
+    4. Confusion matrix plots for each fold.
+
+Each fold CSV is the output of ``eval.py`` and must contain the columns:
+
+    - ``Y``: ground truth labels
+    - ``Y_hat``: predicted labels
+    - ``p_0``...``p_n``: class probabilities
+
+Outputs are saved in the same directory.
+
 """Script to process evaluation results produced by eval.py.
 
 For each split (train, val, test, all) under a given root directory,
@@ -15,7 +34,7 @@ Each fold csv is the output of eval.py and contains columns:
     - 'Y_hat': predicted labels
     - 'p_0'...'p_n': class probabilities
 
-Outputs are saved in the corresponding split directory.
+
 """
 import argparse
 import glob
@@ -24,10 +43,19 @@ from typing import Any, Dict, List
 
 
 def parse_args() -> argparse.Namespace:
+
+    """Parse command-line arguments."""
+
     parser = argparse.ArgumentParser(
         description="Process eval.py results and generate plots/metrics"
     )
     parser.add_argument(
+
+        "--eval_dir",
+        type=str,
+        default="./eval_results",
+        help="Directory containing fold_*.csv files from eval.py",
+
         "--eval_root",
         type=str,
         default="./eval_results",
@@ -38,6 +66,7 @@ def parse_args() -> argparse.Namespace:
         nargs="+",
         default=["train", "val", "test", "all"],
         help="List of splits to process if present",
+
     )
     return parser.parse_args()
 
@@ -66,6 +95,10 @@ def _plot_curves(
 
 def _plot_confusion(cm: Any, classes: List[str], save_path: str) -> None:
     import matplotlib.pyplot as plt
+
+    import numpy as np
+
+
     plt.figure()
     im = plt.imshow(cm, interpolation="nearest", cmap=plt.cm.Blues)
     plt.colorbar(im, fraction=0.046, pad=0.04)
@@ -89,7 +122,11 @@ def _plot_confusion(cm: Any, classes: List[str], save_path: str) -> None:
     plt.close()
 
 
+
+def process_eval_dir(eval_dir: str) -> None:
+
 def process_split(split_dir: str) -> None:
+
     import numpy as np
     import pandas as pd
     from sklearn.metrics import (
@@ -100,9 +137,15 @@ def process_split(split_dir: str) -> None:
     )
     from sklearn.preprocessing import label_binarize
 
+
+    fold_paths = sorted(glob.glob(os.path.join(eval_dir, "fold_*.csv")))
+    if not fold_paths:
+        print(f"No fold csv files found in {eval_dir}, skipping")
+
     fold_paths = sorted(glob.glob(os.path.join(split_dir, "fold_*.csv")))
     if not fold_paths:
         print(f"No fold csv files found in {split_dir}, skipping")
+
         return
 
     all_y_true: List[np.ndarray] = []
@@ -129,7 +172,11 @@ def process_split(split_dir: str) -> None:
         report = classification_report(y_true, y_pred, output_dict=True)
         report_df = pd.DataFrame(report).transpose()
         report_df.to_csv(
+
+            os.path.join(eval_dir, f"metrics_fold_{fold_idx}.csv"), index=True
+
             os.path.join(split_dir, f"metrics_fold_{fold_idx}.csv"), index=True
+
         )
 
         # Confusion matrix per fold
@@ -137,7 +184,11 @@ def process_split(split_dir: str) -> None:
         _plot_confusion(
             cm,
             classes,
+
+            os.path.join(eval_dir, f"confusion_matrix_fold_{fold_idx}.png"),
+
             os.path.join(split_dir, f"confusion_matrix_fold_{fold_idx}.png"),
+
         )
 
         # ROC/PR curves per fold (micro average for multi-class)
@@ -161,14 +212,22 @@ def process_split(split_dir: str) -> None:
         "ROC curves for all folds",
         "False Positive Rate",
         "True Positive Rate",
+
+        os.path.join(eval_dir, "roc_all_folds.png"),
+
         os.path.join(split_dir, "roc_all_folds.png"),
+
     )
     _plot_curves(
         pr_curves,
         "Precision-Recall curves for all folds",
         "Recall",
         "Precision",
+
+        os.path.join(eval_dir, "pr_all_folds.png"),
+
         os.path.join(split_dir, "pr_all_folds.png"),
+
     )
 
     # Aggregate predictions across folds
@@ -182,7 +241,11 @@ def process_split(split_dir: str) -> None:
     # Overall classification report
     report_all = classification_report(y_true_all, y_pred_all, output_dict=True)
     pd.DataFrame(report_all).transpose().to_csv(
+
+        os.path.join(eval_dir, "metrics_overall.csv"), index=True
+
         os.path.join(split_dir, "metrics_overall.csv"), index=True
+
     )
 
     # Per-class ROC and PR curves
@@ -202,19 +265,34 @@ def process_split(split_dir: str) -> None:
         "Per-class ROC curves",
         "False Positive Rate",
         "True Positive Rate",
+
+        os.path.join(eval_dir, "roc_per_class.png"),
+
         os.path.join(split_dir, "roc_per_class.png"),
+
     )
     _plot_curves(
         pr_cls_curves,
         "Per-class Precision-Recall curves",
         "Recall",
         "Precision",
+
+        os.path.join(eval_dir, "pr_per_class.png"),
+
         os.path.join(split_dir, "pr_per_class.png"),
+
     )
 
 
 if __name__ == "__main__":
     args = parse_args()
+
+    if os.path.isdir(args.eval_dir):
+        print(f"Processing directory: {args.eval_dir}")
+        process_eval_dir(args.eval_dir)
+    else:
+        print(f"Evaluation directory {args.eval_dir} not found, skipping")
+
     for split in args.splits:
         split_path = os.path.join(args.eval_root, split)
         if os.path.isdir(split_path):
@@ -222,3 +300,4 @@ if __name__ == "__main__":
             process_split(split_path)
         else:
             print(f"Split directory {split_path} not found, skipping")
+
